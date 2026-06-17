@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Figurinhas - Copa Panini</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
+<style>
+  :root{
+    --ink:#1f2733; --muted:#6b7685; --line:#e4e9f0;
+    --primary:#1f9d57; --primary-d:#15803d; --primary-dd:#0f7a43;
+    --accent:#2563eb; --gold:#f4b740; --danger:#dc2626;
+    --shadow:0 8px 24px rgba(20,30,50,.08); --radius:16px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif; color:var(--ink);
+    background:linear-gradient(180deg,#eef3f8,#e1e8f1) fixed; min-height:100vh;
+    padding:0 14px 70px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:780px; margin:0 auto; }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    max-width:780px; margin:0 auto 18px; color:#fff; padding:24px 22px 20px;
+    background:linear-gradient(135deg,var(--primary-dd),var(--primary) 55%,#2bbf6c);
+    border-radius:0 0 var(--radius) var(--radius); box-shadow:var(--shadow);
+    position:relative; overflow:hidden; animation:slideDown .5s ease both;
+  }
+  .hero::after{ content:""; position:absolute; right:-40px; top:-50px; width:190px; height:190px;
+    background:radial-gradient(circle at 35% 35%,rgba(255,255,255,.28),transparent 62%); pointer-events:none; }
+  .hero h1{ margin:0; font-size:1.55rem; font-weight:800; letter-spacing:.3px; display:flex; align-items:center; gap:10px; }
+  .hero .ball{ display:inline-block; font-size:1.7rem; animation:spin 9s linear infinite; }
+  .hero .sub{ margin-top:5px; font-size:.85rem; opacity:.92; }
+  .stats{ display:flex; gap:9px; margin-top:15px; flex-wrap:wrap; }
+  .stat{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); padding:6px 13px;
+    border-radius:999px; font-size:.8rem; font-weight:600; display:flex; gap:6px; align-items:center; }
+  .stat b{ font-size:1.02rem; }
+
+  /* ---------- CARDS ---------- */
+  .card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px; margin-bottom:16px; animation:rise .45s ease both; }
+  .card h2{ margin:0 0 12px; font-size:1rem; display:flex; align-items:center; gap:8px; color:var(--ink); }
+
+  /* ---------- TABLE ---------- */
+  .table-scroll{ max-height:52vh; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+  table{ width:100%; border-collapse:collapse; font-size:.95rem; }
+  thead th{ position:sticky; top:0; z-index:2; background:var(--primary-dd); color:#fff; font-weight:600;
+    padding:11px 10px; text-align:left; font-size:.74rem; letter-spacing:.5px; text-transform:uppercase; }
+  thead th.num, thead th.qty{ text-align:center; }
+  tbody td{ padding:10px; border-bottom:1px solid var(--line); }
+  tbody tr{ cursor:pointer; transition:background .15s,transform .12s; animation:rowIn .25s ease both; }
+  tbody tr:nth-child(even){ background:#f6faf7; }
+  tbody tr:hover{ background:#e9f9f0; }
+  tbody tr:active{ transform:scale(.997); }
+  tbody td:nth-child(2){ font-weight:700; letter-spacing:.4px; }
+  td.flag{ text-align:center; width:54px; }
+  td.flag .fi{ font-size:1.5rem; border-radius:3px; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+  .emoji-flag{ font-size:1.35rem; }
+  td.num, th.num, td.qty, th.qty{ text-align:center; width:62px; }
+  td.qty{ font-weight:800; color:var(--primary-d); }
+  .empty{ text-align:center; color:var(--muted); padding:28px 12px; }
+
+  /* destaque da última linha adicionada/alterada */
+  tbody tr.highlighted{ background:linear-gradient(90deg,#fff3cf,#fffaf0) !important; box-shadow:inset 4px 0 0 var(--gold); }
+  @keyframes flashRow{ 0%{ background:#ffdf8a; } 55%{ background:#ffe9ad; } 100%{ background:#fff7e3; } }
+  tbody tr.flash{ animation:flashRow 1.3s ease-out; }
+
+  /* ---------- INPUTS ---------- */
+  .inputs{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:.7rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .field.country{ position:relative; flex:1 1 210px; min-width:150px; }
+  input, select{ font:inherit; font-size:1rem; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px;
+    width:100%; background:#fff; color:var(--ink); transition:border-color .15s,box-shadow .15s; }
+  input:focus, select:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(31,157,87,.16); }
+  input.num-input{ width:82px; text-align:center; font-weight:700; }
+  input:disabled{ background:#f1f3f5; color:#aab2bd; cursor:not-allowed; }
+  select#opMode{ min-width:118px; cursor:pointer; }
+
+  /* ---------- DROPDOWN ---------- */
+  .dropdown{ position:absolute; top:calc(100% + 5px); left:0; right:0; background:#fff; border:1px solid var(--line);
+    border-radius:10px; max-height:262px; overflow-y:auto; z-index:30; display:none; box-shadow:0 12px 32px rgba(20,30,50,.18); }
+  .dropdown.open{ display:block; animation:ddIn .16s ease both; }
+  .dd-item{ padding:10px 11px; cursor:pointer; display:flex; gap:10px; align-items:center; border-bottom:1px solid #f1f4f7; }
+  .dd-item:last-child{ border-bottom:none; }
+  .dd-item .fl{ font-size:1.25rem; min-width:26px; }
+  .dd-item .fl .fi{ border-radius:3px; box-shadow:0 1px 2px rgba(0,0,0,.22); }
+  .dd-item .sg{ font-weight:700; min-width:40px; letter-spacing:.5px; }
+  .dd-item .nm{ color:var(--muted); font-size:.9rem; }
+  .dd-item.active, .dd-item:hover{ background:#e9f7ef; }
+
+  /* ---------- BUTTONS ---------- */
+  button{ font:inherit; font-weight:600; padding:11px 16px; border:1.5px solid var(--line); border-radius:10px;
+    background:#fff; color:var(--ink); cursor:pointer; transition:transform .12s,box-shadow .15s,background .15s,filter .15s; }
+  button:hover{ background:#f6f8fa; }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:linear-gradient(135deg,var(--primary),var(--primary-d)); color:#fff; border-color:transparent;
+    box-shadow:0 4px 12px rgba(31,157,87,.3); }
+  button.primary:hover{ filter:brightness(1.06); box-shadow:0 6px 18px rgba(31,157,87,.4); }
+  button.danger{ color:var(--danger); border-color:#f3c9c9; background:#fff5f5; }
+  button.danger:hover{ background:#fde8e8; }
+  .row-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+
+  /* ---------- TEXTAREA / COPY ---------- */
+  textarea{ width:100%; min-height:130px; padding:12px; font-family:ui-monospace,Consolas,monospace; font-size:.85rem;
+    border:1.5px solid var(--line); border-radius:10px; background:#fcfdfe; color:var(--ink); resize:vertical;
+    transition:border-color .15s,box-shadow .15s; }
+  textarea:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(31,157,87,.16); }
+  .copy-bar{ display:flex; justify-content:center; }
+  button.copy{ display:inline-flex; align-items:center; gap:10px; font-size:1.05rem; padding:14px 28px; border-radius:12px; }
+  button.copy svg{ transition:transform .2s; }
+  button.copy:hover svg{ transform:scale(1.12) rotate(-7deg); }
+
+  .hint{ font-size:.78rem; color:var(--muted); margin-top:10px; line-height:1.55; }
+  .hint strong{ color:var(--ink); }
+
+  /* ---------- TOAST ---------- */
+  #toast{ position:fixed; bottom:24px; left:50%; transform:translate(-50%,16px); background:#172033; color:#fff;
+    padding:12px 20px; border-radius:12px; font-size:.9rem; font-weight:600; opacity:0; pointer-events:none; z-index:100;
+    box-shadow:0 12px 30px rgba(0,0,0,.28); transition:opacity .25s,transform .25s; max-width:90vw; text-align:center; }
+  #toast.show{ opacity:1; transform:translate(-50%,0); }
+
+  /* ---------- ANIMATIONS ---------- */
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @keyframes slideDown{ from{ transform:translateY(-18px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  @keyframes rise{ from{ transform:translateY(12px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  @keyframes ddIn{ from{ transform:translateY(-6px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  @keyframes rowIn{ from{ opacity:0; } to{ opacity:1; } }
+
+  /* ---------- MOBILE ---------- */
+  @media (max-width:560px){
+    body{ padding:0 10px 60px; }
+    .hero{ border-radius:0 0 14px 14px; padding:20px 16px 18px; }
+    .hero h1{ font-size:1.3rem; }
+    .card{ padding:13px; }
+    .inputs{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    .field.act, .field.country, #addBtn{ grid-column:1 / -1; }
+    .field.numf{ grid-column:1 / 2; }
+    .field.qtyf{ grid-column:2 / 3; }
+    input.num-input{ width:100%; }
+    #addBtn{ padding:14px; font-size:1.02rem; }
+    thead th{ font-size:.68rem; padding:10px 7px; }
+    tbody td{ padding:10px 7px; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1><span class="ball">⚽</span> Figurinhas Repetidas</h1>
+  <div class="sub">Copa do Mundo · Controle Panini</div>
+  <div id="stats" class="stats"></div>
+</header>
+
+<div class="wrap">
+  <section class="card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Bandeira</th>
+            <th>Sigla</th>
+            <th class="num">Nº</th>
+            <th class="qty">Qtd</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="hint">Toque/clique em uma linha para remover.</div>
+
+    <div class="inputs">
+      <div class="field act">
+        <label for="opMode">Ação</label>
+        <select id="opMode">
+          <option value="somar">Somar</option>
+          <option value="substituir">Substituir</option>
+          <option value="subtrair">Subtrair</option>
+        </select>
+      </div>
+      <div class="field country">
+        <label for="countryInput">País (sigla / nome)</label>
+        <input id="countryInput" type="text" autocomplete="off" placeholder="Ex.: ARG, Brasil...">
+        <div id="dropdown" class="dropdown"></div>
+      </div>
+      <div class="field numf">
+        <label for="numInput">Nº (1–20)</label>
+        <input id="numInput" class="num-input" type="text" inputmode="numeric" autocomplete="off" placeholder="nº">
+      </div>
+      <div class="field qtyf">
+        <label for="qtyInput">Repetições</label>
+        <input id="qtyInput" class="num-input" type="text" inputmode="numeric" autocomplete="off" placeholder="qtd">
+      </div>
+      <button id="addBtn" class="primary">Enviar</button>
+    </div>
+    <div class="hint"><strong>Somar</strong> acrescenta à quantidade existente · <strong>Substituir</strong> define a quantidade exata · <strong>Subtrair</strong> reduz a quantidade (a figurinha some quando zera). O número pula sozinho para "Repetições"; ali, <strong>1 dígito já envia</strong> (vazio + Enter = 1). A última linha editada fica destacada na tabela.</div>
+  </section>
+
+  <section class="card">
+    <h2>📋 Colar controle (texto)</h2>
+    <textarea id="pasteArea" placeholder="Cole aqui a mensagem de controle no formato do WhatsApp..."></textarea>
+    <div class="row-actions">
+      <button id="processBtn">Processar texto</button>
+      <button id="clearBtn" class="danger">Limpar tabela</button>
+    </div>
+    <div class="hint">Ao colar (Ctrl+V) o texto já é processado automaticamente. Processar/colar <strong>substitui toda a tabela</strong> pelo conteúdo do texto (o que não estiver no texto sai da tabela).</div>
+  </section>
+
+  <section class="card copy-bar">
+    <button id="copyBtn" class="primary copy">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      Copiar controle
+    </button>
+  </section>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ----- Base de países (48 seleções): sigla, bandeira (emoji), nome ----- */
+const COUNTRIES = [
+  { sigla: "ARG", flag: "🇦🇷", name: "Argentina" },
+  { sigla: "ALG", flag: "🇩🇿", name: "Argélia" },
+  { sigla: "AUS", flag: "🇦🇺", name: "Austrália" },
+  { sigla: "AUT", flag: "🇦🇹", name: "Áustria" },
+  { sigla: "BEL", flag: "🇧🇪", name: "Bélgica" },
+  { sigla: "BIH", flag: "🇧🇦", name: "Bósnia e Herzegovina" },
+  { sigla: "BRA", flag: "🇧🇷", name: "Brasil" },
+  { sigla: "CAN", flag: "🇨🇦", name: "Canadá" },
+  { sigla: "CIV", flag: "🇨🇮", name: "Costa do Marfim" },
+  { sigla: "COD", flag: "🇨🇩", name: "Congo (RD)" },
+  { sigla: "COL", flag: "🇨🇴", name: "Colômbia" },
+  { sigla: "CRO", flag: "🇭🇷", name: "Croácia" },
+  { sigla: "CPV", flag: "🇨🇻", name: "Cabo Verde" },
+  { sigla: "CUW", flag: "🇨🇼", name: "Curaçao" },
+  { sigla: "CZE", flag: "🇨🇿", name: "Tchéquia" },
+  { sigla: "ECU", flag: "🇪🇨", name: "Equador" },
+  { sigla: "EGY", flag: "🇪🇬", name: "Egito" },
+  { sigla: "ENG", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", name: "Inglaterra" },
+  { sigla: "ESP", flag: "🇪🇸", name: "Espanha" },
+  { sigla: "FRA", flag: "🇫🇷", name: "França" },
+  { sigla: "GER", flag: "🇩🇪", name: "Alemanha" },
+  { sigla: "GHA", flag: "🇬🇭", name: "Gana" },
+  { sigla: "HAI", flag: "🇭🇹", name: "Haiti" },
+  { sigla: "IRN", flag: "🇮🇷", name: "Irã" },
+  { sigla: "IRQ", flag: "🇮🇶", name: "Iraque" },
+  { sigla: "JOR", flag: "🇯🇴", name: "Jordânia" },
+  { sigla: "JPN", flag: "🇯🇵", name: "Japão" },
+  { sigla: "KOR", flag: "🇰🇷", name: "Coreia do Sul" },
+  { sigla: "KSA", flag: "🇸🇦", name: "Arábia Saudita" },
+  { sigla: "MAR", flag: "🇲🇦", name: "Marrocos" },
+  { sigla: "MEX", flag: "🇲🇽", name: "México" },
+  { sigla: "NED", flag: "🇳🇱", name: "Holanda" },
+  { sigla: "NOR", flag: "🇳🇴", name: "Noruega" },
+  { sigla: "NZL", flag: "🇳🇿", name: "Nova Zelândia" },
+  { sigla: "PAN", flag: "🇵🇦", name: "Panamá" },
+  { sigla: "PAR", flag: "🇵🇾", name: "Paraguai" },
+  { sigla: "POR", flag: "🇵🇹", name: "Portugal" },
+  { sigla: "QAT", flag: "🇶🇦", name: "Catar" },
+  { sigla: "RSA", flag: "🇿🇦", name: "África do Sul" },
+  { sigla: "SCO", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", name: "Escócia" },
+  { sigla: "SUI", flag: "🇨🇭", name: "Suíça" },
+  { sigla: "SEN", flag: "🇸🇳", name: "Senegal" },
+  { sigla: "SWE", flag: "🇸🇪", name: "Suécia" },
+  { sigla: "TUN", flag: "🇹🇳", name: "Tunísia" },
+  { sigla: "TUR", flag: "🇹🇷", name: "Turquia" },
+  { sigla: "URU", flag: "🇺🇾", name: "Uruguai" },
+  { sigla: "USA", flag: "🇺🇸", name: "Estados Unidos" },
+  { sigla: "UZB", flag: "🇺🇿", name: "Uzbequistão" },
+];
+
+const SIGLA_MAP = {};
+COUNTRIES.forEach(c => { SIGLA_MAP[c.sigla] = c; });
+
+/* sigla Panini -> código ISO 3166-1 alpha-2 (para os ícones flag-icons na tela) */
+const ISO_MAP = {
+  ARG:"ar", ALG:"dz", AUS:"au", AUT:"at", BEL:"be", BIH:"ba", BRA:"br", CAN:"ca",
+  CIV:"ci", COD:"cd", COL:"co", CRO:"hr", CPV:"cv", CUW:"cw", CZE:"cz", ECU:"ec",
+  EGY:"eg", ENG:"gb-eng", ESP:"es", FRA:"fr", GER:"de", GHA:"gh", HAI:"ht", IRN:"ir",
+  IRQ:"iq", JOR:"jo", JPN:"jp", KOR:"kr", KSA:"sa", MAR:"ma", MEX:"mx", NED:"nl",
+  NOR:"no", NZL:"nz", PAN:"pa", PAR:"py", POR:"pt", QAT:"qa", RSA:"za", SCO:"gb-sct",
+  SUI:"ch", SEN:"sn", SWE:"se", TUN:"tn", TUR:"tr", URU:"uy", USA:"us", UZB:"uz",
+};
+
+/* Figurinhas especiais (sem bandeira de país): ficam SEMPRE no fim, sem cabeçalho de letra.
+   A ordem do array define a ordem na saída. */
+const SPECIALS = [
+  { sigla: "FWC",  flag: "🌎", name: "FWC (especial)", max: 99 },
+  { sigla: "COCA", flag: "🥤", name: "Coca-Cola (especial)", max: 99 },
+];
+const SPECIAL_MAP = {};
+SPECIALS.forEach(s => { SPECIAL_MAP[s.sigla] = s; });
+const isSpecial = sigla => !!SPECIAL_MAP[sigla];
+
+/* lista completa para busca no combobox (países + especiais) */
+const ALL_ITEMS = COUNTRIES.concat(SPECIALS);
+const ITEM_MAP = {};
+ALL_ITEMS.forEach(i => { ITEM_MAP[i.sigla] = i; });
+
+const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+const norm = s => (s || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase();
+const flagOf = sigla => (ITEM_MAP[sigla] ? ITEM_MAP[sigla].flag : "🏳️");
+const maxNumOf = sigla => (SPECIAL_MAP[sigla] ? SPECIAL_MAP[sigla].max : 20);
+
+/* Ícone de imagem para exibição na tela (tabela/combobox). Fallback: emoji. */
+function flagIcon(sigla, emoji) {
+  const iso = ISO_MAP[sigla];
+  if (iso) return '<span class="fi fi-' + iso + '"></span>';
+  return '<span class="emoji-flag">' + (emoji || flagOf(sigla)) + '</span>';
+}
+
+/* ----- Estado / persistência ----- */
+const STORAGE_KEY = "panini_figurinhas_v1";
+/** entries: [{ sigla, num, qty, flag }] em ordem de inserção */
+let entries = [];
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) entries = JSON.parse(raw) || [];
+  } catch (e) { entries = []; }
+}
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch (e) {}
+}
+
+/* Substitui (ou cria) a entrada para sigla+num. Mantém posição se já existir. */
+function upsert(sigla, num, qty, flag) {
+  const existing = entries.find(e => e.sigla === sigla && e.num === num);
+  if (existing) {
+    existing.qty = qty;
+    existing.flag = flag || existing.flag;
+  } else {
+    entries.push({ sigla, num, qty, flag: flag || flagOf(sigla) });
+  }
+}
+
+/* ----- Render da tabela (agrupada por letra inicial da sigla, ordem de entrada) ----- */
+const tbody = document.getElementById("tbody");
+const statsEl = document.getElementById("stats");
+let lastEdited = null;   // { sigla, num } da última linha adicionada/alterada (destacada)
+
+/* Atualiza os contadores do cabeçalho. */
+function updateStats() {
+  if (!statsEl) return;
+  const tipos = entries.length;
+  const total = entries.reduce((s, e) => s + e.qty, 0);
+  statsEl.innerHTML =
+    '<span class="stat">🧮 <b>' + total + '</b> repetidas</span>' +
+    '<span class="stat">📋 <b>' + tipos + '</b> tipos</span>';
+}
+
+/* Agrupa uma lista por sigla, preservando a ordem de primeira aparição. */
+function groupBySigla(list) {
+  const order = [];
+  const map = {};
+  for (const e of list) {
+    if (!map[e.sigla]) { map[e.sigla] = []; order.push(e.sigla); }
+    map[e.sigla].push(e);
+  }
+  return { order, map };
+}
+
+/* Sequência final de siglas: países (por letra inicial) e depois especiais (FWC, COCA).
+   Números crescentes, mas o nº 13 (figurinha especial do álbum) vem sempre primeiro nos países. */
+const cmpNum13First = (a, b) =>
+  (a.num === 13) !== (b.num === 13) ? (a.num === 13 ? -1 : 1) : (a.num - b.num);
+const cmpNumAsc = (a, b) => a.num - b.num;
+
+function orderedSiglas() {
+  const cg = groupBySigla(entries.filter(e => !isSpecial(e.sigla)));
+  const countrySiglas = cg.order.slice().sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const sg = groupBySigla(entries.filter(e => isSpecial(e.sigla)));
+  const specialSiglas = SPECIALS.map(s => s.sigla).filter(s => sg.map[s]);
+  for (const k in cg.map) cg.map[k].sort(cmpNum13First);   // países: 13 primeiro
+  for (const k in sg.map) sg.map[k].sort(cmpNumAsc);       // especiais: crescente puro
+  return {
+    countrySiglas, countryMap: cg.map,
+    specialSiglas, specialMap: sg.map
+  };
+}
+
+function addRow(e) {
+  const tr = document.createElement("tr");
+  tr.dataset.sigla = e.sigla;
+  tr.dataset.num = e.num;
+  if (lastEdited && lastEdited.sigla === e.sigla && lastEdited.num === e.num) tr.classList.add("highlighted");
+  tr.innerHTML =
+    '<td class="flag">' + flagIcon(e.sigla, e.flag) + '</td>' +
+    '<td>' + e.sigla + '</td>' +
+    '<td class="num">' + e.num + '</td>' +
+    '<td class="qty">' + e.qty + '</td>';
+  tr.addEventListener("click", () => {
+    if (confirm("Remover " + (e.flag || flagOf(e.sigla)) + " " + e.sigla + " nº " + e.num + " (" + e.qty + "x)?")) {
+      entries = entries.filter(x => !(x.sigla === e.sigla && x.num === e.num));
+      if (lastEdited && lastEdited.sigla === e.sigla && lastEdited.num === e.num) lastEdited = null;
+      save(); render();
+    }
+  });
+  tbody.appendChild(tr);
+}
+
+/* Rola até a linha sigla+num e dispara a animação de destaque. */
+function highlightRow(sigla, num) {
+  const tr = tbody.querySelector('tr[data-sigla="' + CSS.escape(sigla) + '"][data-num="' + num + '"]');
+  if (!tr) return;
+  tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  tr.classList.remove("flash");
+  void tr.offsetWidth;            // reinicia a animação
+  tr.classList.add("flash");
+}
+
+function render() {
+  updateStats();
+  tbody.innerHTML = "";
+  if (entries.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td class="empty" colspan="4">Nenhuma figurinha registrada.</td>';
+    tbody.appendChild(tr);
+    return;
+  }
+  const o = orderedSiglas();
+  for (const sigla of o.countrySiglas) o.countryMap[sigla].forEach(addRow);
+  for (const sigla of o.specialSiglas) o.specialMap[sigla].forEach(addRow);
+}
+
+/* ----- Combobox type-ahead ----- */
+const countryInput = document.getElementById("countryInput");
+const dropdown = document.getElementById("dropdown");
+const numInput = document.getElementById("numInput");
+const qtyInput = document.getElementById("qtyInput");
+const opMode = document.getElementById("opMode");
+
+let selectedSigla = null;
+let ddActive = -1;
+let ddItems = [];
+
+function filterCountries(q) {
+  q = norm(q.trim());
+  if (!q) return ALL_ITEMS.slice(0, 14);
+  const starts = [], contains = [];
+  for (const c of ALL_ITEMS) {
+    const sg = c.sigla.toLowerCase(), nm = norm(c.name);
+    if (sg.startsWith(q) || nm.startsWith(q)) starts.push(c);
+    else if (sg.includes(q) || nm.includes(q)) contains.push(c);
+  }
+  return starts.concat(contains).slice(0, 14);
+}
+
+function openDropdown() {
+  ddItems = filterCountries(countryInput.value);
+  ddActive = ddItems.length ? 0 : -1;
+  dropdown.innerHTML = "";
+  ddItems.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "dd-item" + (i === ddActive ? " active" : "");
+    div.innerHTML = '<span class="fl">' + flagIcon(c.sigla, c.flag) + '</span><span class="sg">' + c.sigla +
+      '</span><span class="nm">' + c.name + '</span>';
+    div.addEventListener("mousedown", ev => { ev.preventDefault(); pickCountry(c); });
+    dropdown.appendChild(div);
+  });
+  dropdown.classList.toggle("open", ddItems.length > 0);
+}
+function closeDropdown() { dropdown.classList.remove("open"); }
+
+function pickCountry(c) {
+  selectedSigla = c.sigla;
+  countryInput.value = c.sigla + " — " + c.name;
+  closeDropdown();
+  numInput.focus();
+}
+
+countryInput.addEventListener("input", () => { selectedSigla = null; openDropdown(); });
+countryInput.addEventListener("focus", openDropdown);
+countryInput.addEventListener("blur", () => setTimeout(closeDropdown, 120));
+countryInput.addEventListener("keydown", e => {
+  if (!dropdown.classList.contains("open")) {
+    if (e.key === "ArrowDown") { openDropdown(); e.preventDefault(); }
+    return;
+  }
+  if (e.key === "ArrowDown") { ddActive = Math.min(ddActive + 1, ddItems.length - 1); refreshActive(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { ddActive = Math.max(ddActive - 1, 0); refreshActive(); e.preventDefault(); }
+  else if (e.key === "Enter") { if (ddActive >= 0 && ddItems[ddActive]) pickCountry(ddItems[ddActive]); e.preventDefault(); }
+  else if (e.key === "Escape") closeDropdown();
+});
+function refreshActive() {
+  [...dropdown.children].forEach((el, i) => el.classList.toggle("active", i === ddActive));
+  if (dropdown.children[ddActive]) dropdown.children[ddActive].scrollIntoView({ block: "nearest" });
+}
+
+/* Resolve a sigla a partir do que está digitado (caso o usuário não tenha clicado) */
+function resolveSigla() {
+  if (selectedSigla) return selectedSigla;
+  const up = countryInput.value.trim().toUpperCase();
+  if (ITEM_MAP[up.slice(0, 4)]) return up.slice(0, 4);   // COCA
+  if (ITEM_MAP[up.slice(0, 3)]) return up.slice(0, 3);   // países + FWC
+  const matches = filterCountries(countryInput.value);
+  if (matches.length === 1) return matches[0].sigla;
+  if (matches.length && norm(matches[0].name) === norm(countryInput.value)) return matches[0].sigla;
+  return null;
+}
+
+/* ----- Campos numéricos com auto-avanço ----- */
+const NUM_ADVANCE_DELAY = 600;   // ms de espera por um possível 2º dígito
+let numTimer = null;
+const clearNumTimer = () => { if (numTimer) { clearTimeout(numTimer); numTimer = null; } };
+
+numInput.addEventListener("input", () => {
+  clearNumTimer();
+  let v = numInput.value.replace(/\D/g, "");
+  if (v.length > 2) v = v.slice(0, 2);
+  numInput.value = v;
+  if (!v) return;
+
+  if (v.length === 2) { qtyInput.focus(); return; }   // já tem 2 dígitos -> avança na hora
+
+  // 1 dígito: ainda pode virar nº de 2 dígitos? (país: só 1 ou 2 viram 10–20; especial: qualquer)
+  const podeEstender = isSpecial(selectedSigla) ? true : (v === "1" || v === "2");
+  if (podeEstender) {
+    numTimer = setTimeout(() => { numTimer = null; qtyInput.focus(); }, NUM_ADVANCE_DELAY);
+  } else {
+    qtyInput.focus();   // 3–9 num país: não há nº válido <=20 com 2 dígitos -> avança já
+  }
+});
+numInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { clearNumTimer(); qtyInput.focus(); e.preventDefault(); }
+});
+
+qtyInput.addEventListener("input", () => {
+  const v = qtyInput.value.replace(/\D/g, "");
+  qtyInput.value = v.slice(0, 1);      // mantém só o 1º dígito
+  if (qtyInput.value) submitEntry();   // 1 dígito já envia (último campo)
+});
+qtyInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { submitEntry(); e.preventDefault(); }
+});
+
+document.getElementById("addBtn").addEventListener("click", submitEntry);
+
+function submitEntry() {
+  const mode = opMode.value;
+  const sigla = resolveSigla();
+  if (!sigla) { toast("Selecione um país válido"); countryInput.focus(); return; }
+  const num = parseInt(numInput.value, 10);
+  const max = maxNumOf(sigla);
+  if (!num || num < 1 || num > max) { toast("Número deve ser de 1 a " + max); numInput.focus(); return; }
+
+  let qty = parseInt(qtyInput.value, 10);
+  if (!qty || qty < 1) qty = 1;
+
+  if (mode === "subtrair") {
+    const ex = entries.find(e => e.sigla === sigla && e.num === num);
+    if (!ex) { toast(sigla + " nº " + num + " não está na tabela"); resetInputs(sigla); return; }
+    const newQty = ex.qty - qty;
+    if (newQty <= 0) {                       // zerou: remove a figurinha
+      entries = entries.filter(e => !(e.sigla === sigla && e.num === num));
+      if (lastEdited && lastEdited.sigla === sigla && lastEdited.num === num) lastEdited = null;
+      save(); render();
+      toast("Removida (zerou): " + sigla + " nº " + num);
+      resetInputs(sigla);
+      return;
+    }
+    ex.qty = newQty;
+    lastEdited = { sigla, num };
+    save(); render();
+    highlightRow(sigla, num);
+    toast("Subtraída: " + sigla + " nº " + num + " (" + newQty + "x)");
+    resetInputs(sigla);
+    return;
+  }
+
+  if (mode === "somar") {
+    const ex = entries.find(e => e.sigla === sigla && e.num === num);
+    qty = (ex ? ex.qty : 0) + qty;   // acumula
+  }
+  upsert(sigla, num, qty, flagOf(sigla));   // qty final (substituir ou soma acumulada)
+  lastEdited = { sigla, num };
+  save(); render();
+  highlightRow(sigla, num);
+  toast((mode === "somar" ? "Somada: " : "Atualizada: ") + sigla + " nº " + num + " (" + qty + "x)");
+  resetInputs(sigla);
+}
+
+/* Limpa os campos numéricos e mantém o país selecionado para entrada rápida. */
+function resetInputs(sigla) {
+  clearNumTimer();
+  selectedSigla = sigla;
+  numInput.value = "";
+  qtyInput.value = "";
+  numInput.focus();
+}
+
+/* ----- Parser do texto colado ----- */
+function parseText(text) {
+  const lines = text.split(/\r?\n/);
+  // sigla de 3 ou 4 letras (COCA); o ": números" é opcional (linhas como "🥤 COCA" sem números)
+  const lineRe = /^(.*?)\s*([A-Z]{3,4})\s*(?::\s*(.*))?$/;
+  let count = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(lineRe);
+    if (!m) continue;
+    const sigla = m[2];
+    if (!ITEM_MAP[sigla]) continue;     // ignora título/cabeçalhos de letra; só siglas conhecidas
+    const flag = flagOf(sigla);
+    const rest = (m[3] || "").trim();
+    if (!rest) continue;                // cabeçalho sem números (ex.: COCA vazia) -> nada a adicionar
+    for (const part of rest.split(",")) {
+      const pm = part.match(/(\d+)\s*(?:\(\s*(\d+)\s*x?\s*\))?/i);
+      if (!pm) continue;
+      const num = parseInt(pm[1], 10);
+      const qty = pm[2] ? parseInt(pm[2], 10) : 1;
+      if (!num) continue;
+      upsert(sigla, num, qty, flag);    // substitui em caso de conflito
+      count++;
+    }
+  }
+  return count;
+}
+
+function processPaste(text) {
+  // o texto é o controle completo: substitui toda a tabela
+  entries = [];
+  lastEdited = null;
+  const n = parseText(text);
+  save(); render();
+  toast(n > 0 ? "Tabela atualizada (" + n + " figurinhas)" : "Nenhuma figurinha encontrada no texto");
+}
+
+const pasteArea = document.getElementById("pasteArea");
+pasteArea.addEventListener("paste", e => {
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  if (text) { setTimeout(() => processPaste(text), 0); }
+});
+document.getElementById("processBtn").addEventListener("click", () => processPaste(pasteArea.value));
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+  if (entries.length && confirm("Limpar TODA a tabela? Esta ação não pode ser desfeita.")) {
+    entries = []; lastEdited = null; save(); render();
+  }
+});
+
+/* ----- Reconstrução do texto + copiar ----- */
+function buildText() {
+  const o = orderedSiglas();
+  const fmt = e => e.qty > 1 ? (e.num + " (" + e.qty + "x)") : ("" + e.num);
+  let out = "⚽ FIGURINHAS REPETIDAS ⚽\n";
+
+  // países: agrupados pela letra inicial da sigla (com cabeçalho de letra e espaço inicial)
+  let curLetter = null;
+  for (const sigla of o.countrySiglas) {
+    const letter = sigla[0];
+    if (letter !== curLetter) { out += letter + "\n"; curLetter = letter; }
+    out += " " + flagOf(sigla) + " " + sigla + ": " + o.countryMap[sigla].map(fmt).join(", ") + "\n\n";
+  }
+
+  // especiais: SEMPRE no fim (FWC, COCA), sem cabeçalho de letra e sem espaço inicial
+  for (const sp of SPECIALS) {
+    const list = o.specialMap[sp.sigla];
+    if (list && list.length) {
+      out += sp.flag + " " + sp.sigla + ": " + list.map(fmt).join(", ") + "\n\n";
+    } else {
+      out += sp.flag + " " + sp.sigla + "\n\n";
+    }
+  }
+  return out.trimEnd() + "\n";
+}
+
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  if (entries.length === 0) { toast("Tabela vazia"); return; }
+  const text = buildText();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Controle copiado!");
+  } catch (e) {
+    // fallback (contextos sem clipboard API)
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("Controle copiado!"); }
+    catch (_) { toast("Não foi possível copiar"); }
+    document.body.removeChild(ta);
+  }
+});
+
+/* ----- Toast ----- */
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+/* ----- Init ----- */
+load();
+render();
+</script>
+</body>
+</html>
