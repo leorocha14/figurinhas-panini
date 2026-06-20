@@ -103,6 +103,45 @@
   button.danger:hover{ background:#fde8e8; }
   .row-actions{ display:flex; gap:10px; flex-wrap:wrap; }
 
+  /* ---------- MENU SANDUÍCHE ---------- */
+  .menu-btn{ position:absolute; top:18px; right:18px; width:44px; height:44px; padding:0; line-height:1;
+    background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.32); border-radius:11px;
+    font-size:1.4rem; cursor:pointer; z-index:6; }
+  .menu-btn:hover{ background:rgba(255,255,255,.3); }
+  .menu{ position:absolute; top:66px; right:18px; min-width:210px; background:#fff; border:1px solid var(--line);
+    border-radius:12px; box-shadow:0 16px 40px rgba(20,30,50,.24); overflow:hidden; z-index:60; display:none; }
+  .menu.open{ display:block; animation:ddIn .16s ease both; }
+  .menu a{ display:flex; gap:10px; align-items:center; padding:14px 16px; color:var(--ink); cursor:pointer;
+    font-weight:600; border-bottom:1px solid #f1f4f7; }
+  .menu a:last-child{ border-bottom:none; }
+  .menu a:hover, .menu a.active{ background:#e9f7ef; color:var(--primary-d); }
+
+  /* ---------- ABAS ---------- */
+  .tabs{ display:flex; gap:6px; margin-bottom:14px; padding:6px; background:#fff; border:1px solid var(--line);
+    border-radius:13px; box-shadow:var(--shadow); }
+  .tab{ flex:1; border:none; background:transparent; padding:12px 10px; border-radius:9px; font-weight:700;
+    color:var(--muted); cursor:pointer; transition:background .15s,color .15s,box-shadow .15s; }
+  .tab:hover{ background:#f2f6f3; }
+  .tab.active{ background:linear-gradient(135deg,var(--primary),var(--primary-d)); color:#fff;
+    box-shadow:0 4px 12px rgba(31,157,87,.3); }
+  .pane[hidden], [hidden]{ display:none; }
+  td.falt{ font-weight:700; color:var(--primary-d); }
+  td.falt .done{ color:var(--muted); font-weight:600; }
+  tbody tr.no-click{ cursor:default; }
+  tbody tr.no-click:active{ transform:none; }
+
+  /* ---------- MODAL ---------- */
+  .modal{ position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; padding:18px;
+    background:rgba(15,23,33,.55); animation:rowIn .18s ease both; }
+  .modal[hidden]{ display:none; }   /* precisa vencer o display:flex acima */
+  .modal-card{ background:#fff; border-radius:18px; padding:24px; width:100%; max-width:380px; text-align:center;
+    box-shadow:0 26px 64px rgba(0,0,0,.38); animation:rise .22s ease both; }
+  .modal-card h3{ margin:0 0 18px; font-size:1.18rem; }
+  .modal-actions{ display:flex; gap:12px; }
+  .modal-actions button{ flex:1; padding:16px 12px; font-size:1.02rem; }
+  .modal-close{ margin-top:14px; width:100%; background:transparent; border:none; color:var(--muted); font-weight:600; }
+  .modal-close:hover{ background:#f3f5f7; }
+
   /* ---------- TEXTAREA / COPY ---------- */
   textarea{ width:100%; min-height:130px; padding:12px; font-family:ui-monospace,Consolas,monospace; font-size:.85rem;
     border:1.5px solid var(--line); border-radius:10px; background:#fcfdfe; color:var(--ink); resize:vertical;
@@ -121,11 +160,10 @@
     padding:13px 22px; border-radius:12px; font-size:.95rem; font-weight:700; opacity:0; pointer-events:none; z-index:100;
     box-shadow:0 12px 30px rgba(0,0,0,.28); transition:opacity .25s,transform .25s; max-width:90vw; text-align:center; }
   #toast.show{ opacity:1; transform:translate(-50%,0); }
-  #toast.t-soma{ background:#1f9d57; }
-  #toast.t-ok{ background:#15803d; }
-  #toast.t-substituicao{ background:#2563eb; }
-  #toast.t-subtracao{ background:#d97706; }
-  #toast.t-remocao, #toast.t-erro{ background:#dc2626; }
+  /* verde para TODAS as operações concluídas; amarelo só para o aviso de faltante; vermelho p/ erro */
+  #toast.t-ok, #toast.t-soma, #toast.t-substituicao, #toast.t-subtracao, #toast.t-remocao{ background:#1f9d57; }
+  #toast.t-warning{ background:#f4b40a; color:#231900; }
+  #toast.t-erro{ background:#dc2626; }
   #toast.t-info{ background:#334155; }
   /* no celular vira um aviso grande travado no centro da tela */
   @media (max-width:560px){
@@ -164,13 +202,25 @@
 </head>
 <body>
 <header class="hero">
+  <button id="menuBtn" class="menu-btn" aria-label="Menu">☰</button>
   <h1><span class="ball">⚽</span> Figurinhas Repetidas</h1>
   <div class="sub">Copa do Mundo · Controle Panini</div>
   <div id="stats" class="stats"></div>
+  <nav id="menu" class="menu">
+    <a data-view="tables" class="active">📊 Tabelas</a>
+    <a data-view="load">📥 Carregar controle</a>
+  </nav>
 </header>
 
-<div class="wrap">
-  <section class="card">
+<!-- ============ VIEW: TABELAS ============ -->
+<div class="wrap" id="viewTables">
+  <div class="tabs">
+    <button class="tab active" data-tab="repetidas">🔁 Repetidas</button>
+    <button class="tab" data-tab="faltantes">❓ Faltantes</button>
+  </div>
+
+  <!-- Painel REPETIDAS -->
+  <section class="card pane" id="paneRepetidas">
     <div class="table-scroll">
       <table>
         <thead>
@@ -210,17 +260,30 @@
       </div>
       <button id="addBtn" class="primary">Enviar</button>
     </div>
-    <div class="hint"><strong>Somar</strong> acrescenta à quantidade existente · <strong>Substituir</strong> define a quantidade exata · <strong>Subtrair</strong> reduz a quantidade (a figurinha some quando zera). O número pula sozinho para "Repetições"; ali, <strong>1 dígito já envia</strong> (vazio + Enter = 1). A última linha editada fica destacada na tabela.</div>
+    <div class="hint"><strong>Somar</strong> acrescenta à quantidade existente · <strong>Substituir</strong> define a quantidade exata · <strong>Subtrair</strong> reduz a quantidade (a figurinha some quando zera). Ao <strong>somar</strong>, se a figurinha for faltante, 1 cópia preenche o álbum e só o resto vai para repetidas. O número pula sozinho para "Repetições"; ali, <strong>1 dígito já envia</strong> (vazio + Enter = 1).</div>
+    <div class="row-actions">
+      <button id="clearRepBtn" class="danger">Limpar repetidas</button>
+    </div>
   </section>
 
-  <section class="card">
-    <h2>📋 Colar controle (texto)</h2>
-    <textarea id="pasteArea" placeholder="Cole aqui a mensagem de controle no formato do WhatsApp..."></textarea>
-    <div class="row-actions">
-      <button id="processBtn">Processar texto</button>
-      <button id="clearBtn" class="danger">Limpar tabela</button>
+  <!-- Painel FALTANTES -->
+  <section class="card pane" id="paneFaltantes" hidden>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Bandeira</th>
+            <th>Sigla</th>
+            <th>Faltam</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyFalt"></tbody>
+      </table>
     </div>
-    <div class="hint">Ao colar (Ctrl+V) o texto já é processado automaticamente. Processar/colar <strong>substitui toda a tabela</strong> pelo conteúdo do texto (o que não estiver no texto sai da tabela).</div>
+    <div class="hint">Carregue pelo menu ☰ → <strong>Carregar controle</strong>. As faltantes somem sozinhas quando você soma uma repetida que era faltante. Times completos continuam na lista (bandeira + sigla).</div>
+    <div class="row-actions">
+      <button id="clearFaltBtn" class="danger">Limpar faltantes</button>
+    </div>
   </section>
 
   <section class="card copy-bar">
@@ -233,6 +296,38 @@
       Copiar controle
     </button>
   </section>
+</div>
+
+<!-- ============ VIEW: CARREGAR ============ -->
+<div class="wrap" id="viewLoad" hidden>
+  <section class="card">
+    <h2>📥 Carregar controle (colar texto)</h2>
+    <div class="field" style="margin-bottom:12px;">
+      <label for="loadType">Tipo de controle</label>
+      <select id="loadType">
+        <option value="repetidas">🔁 Repetidas</option>
+        <option value="faltantes">❓ Faltantes</option>
+      </select>
+    </div>
+    <textarea id="loadArea" placeholder="1) Escolha o tipo acima  ·  2) Cole aqui o controle (Ctrl+V)"></textarea>
+    <div class="row-actions">
+      <button id="loadBtn" class="primary">Processar e carregar</button>
+      <button id="backBtn">Voltar às tabelas</button>
+    </div>
+    <div class="hint">Ao colar (Ctrl+V) já processa. <strong>Substitui</strong> a tabela escolhida e o campo se limpa sozinho — esta tela não guarda estado.</div>
+  </section>
+</div>
+
+<!-- Modal: escolher qual controle copiar -->
+<div id="copyModal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>Copiar qual controle?</h3>
+    <div class="modal-actions">
+      <button id="copyRepBtn" class="primary">🔁 Repetidas</button>
+      <button id="copyFaltBtn" class="primary">❓ Faltantes</button>
+    </div>
+    <button id="copyCancelBtn" class="modal-close">Cancelar</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -350,6 +445,92 @@ function save() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch (e) {}
 }
 
+/* ===== Tabela de FALTANTES =====
+   faltantes: [{ sigla, flag, nums:[int] }] na ordem em que foram colados.
+   Times completos permanecem na lista com nums vazio (mantêm bandeira + sigla). */
+const FALT_KEY = "panini_faltantes_v1";
+let faltantes = [];
+
+function loadFalt() {
+  try { const r = localStorage.getItem(FALT_KEY); if (r) faltantes = JSON.parse(r) || []; }
+  catch (e) { faltantes = []; }
+}
+function saveFalt() {
+  try { localStorage.setItem(FALT_KEY, JSON.stringify(faltantes)); } catch (e) {}
+}
+
+const FALT_LINE_RE = /^(.*?)\s*([A-Z]{3,4})\s*(?::\s*(.*))?$/;
+/* Lê o controle de faltantes (formato "📋 Minhas Figurinhas Faltantes"). Substitui a lista.
+   Mantém TODOS os times (mesmo sem números = completos). Retorna a qtd de times. */
+function parseFaltantes(text) {
+  const order = [], map = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(FALT_LINE_RE);
+    if (!m) continue;
+    const sigla = m[2];
+    if (!ITEM_MAP[sigla]) continue;              // ignora cabeçalho e linhas desconhecidas
+    const flag = m[1].trim() || flagOf(sigla);
+    if (!map[sigla]) { map[sigla] = { sigla, flag, nums: [] }; order.push(sigla); }
+    const rest = (m[3] || "").trim();
+    if (rest) {
+      for (const part of rest.split(",")) {
+        const d = part.match(/\d+/);
+        if (!d) continue;
+        const num = parseInt(d[0], 10);
+        if (Number.isNaN(num)) continue;
+        if (num === 0 && sigla !== "FWC") continue;       // só FWC tem a 00
+        if (!map[sigla].nums.includes(num)) map[sigla].nums.push(num);
+      }
+    }
+  }
+  for (const s of order) map[s].nums.sort((a, b) => a - b);   // faltantes em ordem crescente
+  faltantes = order.map(s => map[s]);
+  return faltantes.length;
+}
+
+/* Reconstrói a mensagem de faltantes (mesma ordem; times completos = só bandeira + sigla). */
+function buildFaltantes() {
+  let out = "📋 Minhas Figurinhas Faltantes:\n";
+  for (const t of faltantes) {
+    const nums = t.nums.map(n => numText(t.sigla, n)).join(", ");
+    out += t.flag + " " + t.sigla + (nums ? ": " + nums : "") + "\n\n";   // completo: sem ":"
+  }
+  return out.trimEnd() + "\n";
+}
+
+function isFaltante(sigla, num) {
+  const t = faltantes.find(t => t.sigla === sigla);
+  return !!(t && t.nums.includes(num));
+}
+/* Remove o número das faltantes do time (mas mantém o time na lista, mesmo zerado). */
+function removeFaltante(sigla, num) {
+  const t = faltantes.find(t => t.sigla === sigla);
+  if (t) t.nums = t.nums.filter(n => n !== num);
+}
+
+const tbodyFalt = document.getElementById("tbodyFalt");
+function renderFaltantes() {
+  tbodyFalt.innerHTML = "";
+  if (faltantes.length === 0) {
+    tbodyFalt.innerHTML = '<tr><td class="empty" colspan="3">Nenhuma faltante carregada. Use o menu ☰ → Carregar controle.</td></tr>';
+    return;
+  }
+  for (const t of faltantes) {
+    const tr = document.createElement("tr");
+    tr.className = "no-click";
+    const cell = t.nums.length
+      ? t.nums.map(n => numText(t.sigla, n)).join(", ")
+      : '<span class="done">✓ completo</span>';
+    tr.innerHTML =
+      '<td class="flag">' + flagIcon(t.sigla, t.flag) + '</td>' +
+      '<td>' + t.sigla + '</td>' +
+      '<td class="falt">' + cell + '</td>';
+    tbodyFalt.appendChild(tr);
+  }
+}
+
 /* Substitui (ou cria) a entrada para sigla+num. Mantém posição se já existir. */
 function upsert(sigla, num, qty, flag) {
   const existing = entries.find(e => e.sigla === sigla && e.num === num);
@@ -371,9 +552,11 @@ function updateStats() {
   if (!statsEl) return;
   const tipos = entries.length;
   const total = entries.reduce((s, e) => s + e.qty, 0);
+  const faltam = faltantes.reduce((s, t) => s + t.nums.length, 0);
   statsEl.innerHTML =
     '<span class="stat">🧮 <b>' + total + '</b> repetidas</span>' +
-    '<span class="stat">📋 <b>' + tipos + '</b> tipos</span>';
+    '<span class="stat">📋 <b>' + tipos + '</b> tipos</span>' +
+    '<span class="stat">❓ <b>' + faltam + '</b> faltam</span>';
 }
 
 /* Agrupa uma lista por sigla, preservando a ordem de primeira aparição. */
@@ -421,7 +604,7 @@ function addRow(e) {
       entries = entries.filter(x => !(x.sigla === e.sigla && x.num === e.num));
       if (lastEdited && lastEdited.sigla === e.sigla && lastEdited.num === e.num) lastEdited = null;
       save(); render();
-      toast("Remoção · " + e.sigla + " nº " + numText(e.sigla, e.num), "remocao");
+      toast("Remoção · " + e.sigla + " nº " + numText(e.sigla, e.num), "ok");
     }
   });
   tbody.appendChild(tr);
@@ -579,7 +762,7 @@ function submitEntry() {
   let qty = parseInt(qtyInput.value, 10);
   if (!qty || qty < 1) qty = 1;
 
-  if (mode === "subtrair") {
+  if (mode === "subtrair") {                 // INALTERADO: opera só nas repetidas, cor verde
     const ex = entries.find(e => e.sigla === sigla && e.num === num);
     if (!ex) { toast(sigla + " nº " + nLabel + " não está na tabela", "info"); resetInputs(sigla); return; }
     const newQty = ex.qty - qty;
@@ -587,7 +770,7 @@ function submitEntry() {
       entries = entries.filter(e => !(e.sigla === sigla && e.num === num));
       if (lastEdited && lastEdited.sigla === sigla && lastEdited.num === num) lastEdited = null;
       save(); render();
-      toast("Remoção · " + sigla + " nº " + nLabel, "remocao");
+      toast("Remoção · " + sigla + " nº " + nLabel, "ok");
       resetInputs(sigla);
       return;
     }
@@ -595,21 +778,40 @@ function submitEntry() {
     lastEdited = { sigla, num };
     save(); render();
     highlightRow(sigla, num);
-    toast("Subtração · " + sigla + " nº " + nLabel + " (" + newQty + "x)", "subtracao");
+    toast("Subtração · " + sigla + " nº " + nLabel + " (" + newQty + "x)", "ok");
     resetInputs(sigla);
     return;
   }
 
   if (mode === "somar") {
+    // ===== Cruzamento com FALTANTES (só na soma) =====
+    if (isFaltante(sigla, num)) {
+      removeFaltante(sigla, num);            // deduz das faltantes (1 cópia preenche o álbum)
+      saveFalt();
+      const addRep = qty - 1;                // o resto vira repetida
+      if (addRep > 0) {
+        const ex = entries.find(e => e.sigla === sigla && e.num === num);
+        upsert(sigla, num, (ex ? ex.qty : 0) + addRep, flagOf(sigla));
+        lastEdited = { sigla, num };
+        save(); render(); renderFaltantes();
+        highlightRow(sigla, num);
+        toast("⚠️ " + sigla + " nº " + nLabel + " era faltante: 1 vai pro álbum, " + addRep + " em repetidas", "warning");
+      } else {                               // veio só 1: preenche o álbum, nada vira repetida
+        render(); renderFaltantes();
+        toast("⚠️ " + sigla + " nº " + nLabel + " não é repetida — cole no álbum", "warning");
+      }
+      resetInputs(sigla);
+      return;
+    }
+    // não é faltante: soma normal
     const ex = entries.find(e => e.sigla === sigla && e.num === num);
-    qty = (ex ? ex.qty : 0) + qty;   // acumula
+    qty = (ex ? ex.qty : 0) + qty;           // acumula
   }
-  upsert(sigla, num, qty, flagOf(sigla));   // qty final (substituir ou soma acumulada)
+  upsert(sigla, num, qty, flagOf(sigla));    // qty final (substituir ou soma acumulada)
   lastEdited = { sigla, num };
   save(); render();
   highlightRow(sigla, num);
-  toast((mode === "somar" ? "Soma · " : "Substituição · ") + sigla + " nº " + nLabel + " (" + qty + "x)",
-        mode === "somar" ? "soma" : "substituicao");
+  toast((mode === "somar" ? "Soma · " : "Substituição · ") + sigla + " nº " + nLabel + " (" + qty + "x)", "ok");
   resetInputs(sigla);
 }
 
@@ -652,26 +854,68 @@ function parseText(text) {
   return count;
 }
 
-function processPaste(text) {
-  // o texto é o controle completo: substitui toda a tabela
-  entries = [];
-  lastEdited = null;
+/* ----- Carregadores (usados pela view "Carregar") ----- */
+function loadRepetidas(text) {               // substitui toda a tabela de repetidas
+  entries = []; lastEdited = null;
   const n = parseText(text);
   save(); render();
-  toast(n > 0 ? "Tabela atualizada (" + n + " figurinhas)" : "Nenhuma figurinha encontrada no texto", n > 0 ? "ok" : "info");
+  return n;
+}
+function loadFaltantesText(text) {           // substitui toda a tabela de faltantes
+  const n = parseFaltantes(text);
+  saveFalt(); renderFaltantes(); render();   // render() atualiza os contadores
+  return n;
 }
 
-const pasteArea = document.getElementById("pasteArea");
-pasteArea.addEventListener("paste", e => {
-  const text = (e.clipboardData || window.clipboardData).getData("text");
-  if (text) { setTimeout(() => processPaste(text), 0); }
-});
-document.getElementById("processBtn").addEventListener("click", () => processPaste(pasteArea.value));
+/* ----- Navegação: menu sanduíche + abas + views ----- */
+const menuBtn = document.getElementById("menuBtn");
+const menu = document.getElementById("menu");
+const tabsEls = document.querySelectorAll(".tab");
 
-document.getElementById("clearBtn").addEventListener("click", () => {
-  if (entries.length && confirm("Limpar TODA a tabela? Esta ação não pode ser desfeita.")) {
-    entries = []; lastEdited = null; save(); render();
+function showView(name) {
+  document.getElementById("viewTables").hidden = (name !== "tables");
+  document.getElementById("viewLoad").hidden = (name !== "load");
+  menu.querySelectorAll("a").forEach(a => a.classList.toggle("active", a.dataset.view === name));
+}
+function showTab(name) {
+  document.getElementById("paneRepetidas").hidden = (name !== "repetidas");
+  document.getElementById("paneFaltantes").hidden = (name !== "faltantes");
+  tabsEls.forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+}
+
+menuBtn.addEventListener("click", e => { e.stopPropagation(); menu.classList.toggle("open"); });
+document.addEventListener("click", e => { if (e.target !== menuBtn && !menu.contains(e.target)) menu.classList.remove("open"); });
+menu.querySelectorAll("a").forEach(a => a.addEventListener("click", () => { showView(a.dataset.view); menu.classList.remove("open"); }));
+tabsEls.forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
+
+/* ----- View Carregar ----- */
+const loadType = document.getElementById("loadType");
+const loadArea = document.getElementById("loadArea");
+function processLoad(text) {
+  if (!text || !text.trim()) { toast("Cole um texto primeiro", "info"); return; }
+  const type = loadType.value;
+  const n = (type === "repetidas") ? loadRepetidas(text) : loadFaltantesText(text);
+  loadArea.value = "";                       // auto-limpa (a view não guarda estado)
+  if (n > 0) {
+    toast(type === "repetidas" ? ("Repetidas carregadas (" + n + ")") : ("Faltantes carregadas (" + n + " times)"), "ok");
+    showView("tables"); showTab(type);
+  } else {
+    toast("Nada reconhecido no texto", "info");
   }
+}
+loadArea.addEventListener("paste", e => {
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  if (text) setTimeout(() => processLoad(text), 0);
+});
+document.getElementById("loadBtn").addEventListener("click", () => processLoad(loadArea.value));
+document.getElementById("backBtn").addEventListener("click", () => showView("tables"));
+
+/* ----- Limpar tabelas ----- */
+document.getElementById("clearRepBtn").addEventListener("click", () => {
+  if (entries.length && confirm("Limpar a tabela de REPETIDAS?")) { entries = []; lastEdited = null; save(); render(); }
+});
+document.getElementById("clearFaltBtn").addEventListener("click", () => {
+  if (faltantes.length && confirm("Limpar a tabela de FALTANTES?")) { faltantes = []; saveFalt(); renderFaltantes(); render(); }
 });
 
 /* ----- Reconstrução do texto + copiar ----- */
@@ -700,22 +944,38 @@ function buildText() {
   return out.trimEnd() + "\n";
 }
 
-document.getElementById("copyBtn").addEventListener("click", async () => {
-  if (entries.length === 0) { toast("Tabela vazia", "info"); return; }
-  const text = buildText();
-  try {
-    await navigator.clipboard.writeText(text);
-    toast("Controle copiado!", "ok");
-  } catch (e) {
-    // fallback (contextos sem clipboard API)
-    const ta = document.createElement("textarea");
-    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand("copy"); toast("Controle copiado!", "ok"); }
-    catch (_) { toast("Não foi possível copiar", "erro"); }
-    document.body.removeChild(ta);
+/* ----- Copiar: pergunta qual controle (modal) ----- */
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
+  document.body.removeChild(ta); done(ok);
+}
+function copyToClipboard(text, okMsg) {
+  const done = ok => toast(ok ? okMsg : "Não foi possível copiar", ok ? "ok" : "erro");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => done(true)).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
   }
-});
+}
+function copyControl(type) {
+  if (type === "repetidas") {
+    if (entries.length === 0) { toast("Repetidas: tabela vazia", "info"); return; }
+    copyToClipboard(buildText(), "Controle de repetidas copiado!");
+  } else {
+    if (faltantes.length === 0) { toast("Faltantes: carregue o controle primeiro", "info"); return; }
+    copyToClipboard(buildFaltantes(), "Controle de faltantes copiado!");
+  }
+}
+const copyModal = document.getElementById("copyModal");
+function closeCopyModal() { copyModal.hidden = true; }
+document.getElementById("copyBtn").addEventListener("click", () => { copyModal.hidden = false; });
+document.getElementById("copyRepBtn").addEventListener("click", () => { closeCopyModal(); copyControl("repetidas"); });
+document.getElementById("copyFaltBtn").addEventListener("click", () => { closeCopyModal(); copyControl("faltantes"); });
+document.getElementById("copyCancelBtn").addEventListener("click", closeCopyModal);
+copyModal.addEventListener("click", e => { if (e.target === copyModal) closeCopyModal(); });
 
 /* ----- Toast / aviso de operação -----
    No desktop é um tip discreto (canto inferior); no celular vira um aviso grande
@@ -732,7 +992,11 @@ function toast(msg, type) {
 
 /* ----- Init ----- */
 load();
+loadFalt();
 render();
+renderFaltantes();
+showTab("repetidas");
+showView("tables");
 </script>
 </body>
 </html>
