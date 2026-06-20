@@ -116,11 +116,24 @@
   .hint{ font-size:.78rem; color:var(--muted); margin-top:10px; line-height:1.55; }
   .hint strong{ color:var(--ink); }
 
-  /* ---------- TOAST ---------- */
+  /* ---------- TOAST / AVISO DE OPERAÇÃO ---------- */
   #toast{ position:fixed; bottom:24px; left:50%; transform:translate(-50%,16px); background:#172033; color:#fff;
-    padding:12px 20px; border-radius:12px; font-size:.9rem; font-weight:600; opacity:0; pointer-events:none; z-index:100;
+    padding:13px 22px; border-radius:12px; font-size:.95rem; font-weight:700; opacity:0; pointer-events:none; z-index:100;
     box-shadow:0 12px 30px rgba(0,0,0,.28); transition:opacity .25s,transform .25s; max-width:90vw; text-align:center; }
   #toast.show{ opacity:1; transform:translate(-50%,0); }
+  #toast.t-soma{ background:#1f9d57; }
+  #toast.t-ok{ background:#15803d; }
+  #toast.t-substituicao{ background:#2563eb; }
+  #toast.t-subtracao{ background:#d97706; }
+  #toast.t-remocao, #toast.t-erro{ background:#dc2626; }
+  #toast.t-info{ background:#334155; }
+  /* no celular vira um aviso grande travado no centro da tela */
+  @media (max-width:560px){
+    #toast{ bottom:auto; top:50%; left:50%; transform:translate(-50%,calc(-50% + 14px));
+      font-size:1.3rem; padding:24px 28px; border-radius:18px; max-width:84vw; line-height:1.35;
+      box-shadow:0 22px 55px rgba(0,0,0,.42); }
+    #toast.show{ transform:translate(-50%,-50%); }
+  }
 
   /* ---------- ANIMATIONS ---------- */
   @keyframes spin{ to{ transform:rotate(360deg); } }
@@ -295,8 +308,8 @@ const ISO_MAP = {
 /* Figurinhas especiais (sem bandeira de país): ficam SEMPRE no fim, sem cabeçalho de letra.
    A ordem do array define a ordem na saída. */
 const SPECIALS = [
-  { sigla: "FWC",  flag: "🌎", name: "FWC (especial)", max: 99 },
-  { sigla: "COCA", flag: "🥤", name: "Coca-Cola (especial)", max: 99 },
+  { sigla: "FWC",  flag: "🌎", name: "FWC (especial)", min: 0, max: 99 },   // FWC tem a figurinha 00
+  { sigla: "COCA", flag: "🥤", name: "Coca-Cola (especial)", min: 1, max: 99 },
 ];
 const SPECIAL_MAP = {};
 SPECIALS.forEach(s => { SPECIAL_MAP[s.sigla] = s; });
@@ -311,6 +324,9 @@ const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
 const norm = s => (s || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase();
 const flagOf = sigla => (ITEM_MAP[sigla] ? ITEM_MAP[sigla].flag : "🏳️");
 const maxNumOf = sigla => (SPECIAL_MAP[sigla] ? SPECIAL_MAP[sigla].max : 20);
+const minNumOf = sigla => (SPECIAL_MAP[sigla] && SPECIAL_MAP[sigla].min != null ? SPECIAL_MAP[sigla].min : 1);
+/* rótulo do número para exibição: FWC 0 aparece como "00" */
+const numText = (sigla, num) => (sigla === "FWC" && num === 0) ? "00" : ("" + num);
 
 /* Ícone de imagem para exibição na tela (tabela/combobox). Fallback: emoji. */
 function flagIcon(sigla, emoji) {
@@ -398,13 +414,14 @@ function addRow(e) {
   tr.innerHTML =
     '<td class="flag">' + flagIcon(e.sigla, e.flag) + '</td>' +
     '<td>' + e.sigla + '</td>' +
-    '<td class="num">' + e.num + '</td>' +
+    '<td class="num">' + numText(e.sigla, e.num) + '</td>' +
     '<td class="qty">' + e.qty + '</td>';
   tr.addEventListener("click", () => {
-    if (confirm("Remover " + (e.flag || flagOf(e.sigla)) + " " + e.sigla + " nº " + e.num + " (" + e.qty + "x)?")) {
+    if (confirm("Remover " + (e.flag || flagOf(e.sigla)) + " " + e.sigla + " nº " + numText(e.sigla, e.num) + " (" + e.qty + "x)?")) {
       entries = entries.filter(x => !(x.sigla === e.sigla && x.num === e.num));
       if (lastEdited && lastEdited.sigla === e.sigla && lastEdited.num === e.num) lastEdited = null;
       save(); render();
+      toast("Remoção · " + e.sigla + " nº " + numText(e.sigla, e.num), "remocao");
     }
   });
   tbody.appendChild(tr);
@@ -481,7 +498,8 @@ function pickCountry(c) {
 }
 
 countryInput.addEventListener("input", () => { selectedSigla = null; openDropdown(); });
-countryInput.addEventListener("focus", openDropdown);
+// ao focar/clicar, limpa o campo para já começar uma nova busca
+countryInput.addEventListener("focus", () => { countryInput.value = ""; selectedSigla = null; openDropdown(); });
 countryInput.addEventListener("blur", () => setTimeout(closeDropdown, 120));
 countryInput.addEventListener("keydown", e => {
   if (!dropdown.classList.contains("open")) {
@@ -511,7 +529,7 @@ function resolveSigla() {
 }
 
 /* ----- Campos numéricos com auto-avanço ----- */
-const NUM_ADVANCE_DELAY = 600;   // ms de espera por um possível 2º dígito
+const NUM_ADVANCE_DELAY = 1000;  // ms de espera por um possível 2º dígito
 let numTimer = null;
 const clearNumTimer = () => { if (numTimer) { clearTimeout(numTimer); numTimer = null; } };
 
@@ -550,23 +568,26 @@ document.getElementById("addBtn").addEventListener("click", submitEntry);
 function submitEntry() {
   const mode = opMode.value;
   const sigla = resolveSigla();
-  if (!sigla) { toast("Selecione um país válido"); countryInput.focus(); return; }
+  if (!sigla) { toast("Selecione um país válido", "erro"); countryInput.focus(); return; }
   const num = parseInt(numInput.value, 10);
-  const max = maxNumOf(sigla);
-  if (!num || num < 1 || num > max) { toast("Número deve ser de 1 a " + max); numInput.focus(); return; }
+  const min = minNumOf(sigla), max = maxNumOf(sigla);
+  if (Number.isNaN(num) || num < min || num > max) {
+    toast("Número deve ser de " + numText(sigla, min) + " a " + max, "erro"); numInput.focus(); return;
+  }
+  const nLabel = numText(sigla, num);
 
   let qty = parseInt(qtyInput.value, 10);
   if (!qty || qty < 1) qty = 1;
 
   if (mode === "subtrair") {
     const ex = entries.find(e => e.sigla === sigla && e.num === num);
-    if (!ex) { toast(sigla + " nº " + num + " não está na tabela"); resetInputs(sigla); return; }
+    if (!ex) { toast(sigla + " nº " + nLabel + " não está na tabela", "info"); resetInputs(sigla); return; }
     const newQty = ex.qty - qty;
     if (newQty <= 0) {                       // zerou: remove a figurinha
       entries = entries.filter(e => !(e.sigla === sigla && e.num === num));
       if (lastEdited && lastEdited.sigla === sigla && lastEdited.num === num) lastEdited = null;
       save(); render();
-      toast("Removida (zerou): " + sigla + " nº " + num);
+      toast("Remoção · " + sigla + " nº " + nLabel, "remocao");
       resetInputs(sigla);
       return;
     }
@@ -574,7 +595,7 @@ function submitEntry() {
     lastEdited = { sigla, num };
     save(); render();
     highlightRow(sigla, num);
-    toast("Subtraída: " + sigla + " nº " + num + " (" + newQty + "x)");
+    toast("Subtração · " + sigla + " nº " + nLabel + " (" + newQty + "x)", "subtracao");
     resetInputs(sigla);
     return;
   }
@@ -587,7 +608,8 @@ function submitEntry() {
   lastEdited = { sigla, num };
   save(); render();
   highlightRow(sigla, num);
-  toast((mode === "somar" ? "Somada: " : "Atualizada: ") + sigla + " nº " + num + " (" + qty + "x)");
+  toast((mode === "somar" ? "Soma · " : "Substituição · ") + sigla + " nº " + nLabel + " (" + qty + "x)",
+        mode === "somar" ? "soma" : "substituicao");
   resetInputs(sigla);
 }
 
@@ -621,7 +643,8 @@ function parseText(text) {
       if (!pm) continue;
       const num = parseInt(pm[1], 10);
       const qty = pm[2] ? parseInt(pm[2], 10) : 1;
-      if (!num) continue;
+      if (Number.isNaN(num)) continue;
+      if (num === 0 && sigla !== "FWC") continue;  // só a FWC tem a figurinha 00
       upsert(sigla, num, qty, flag);    // substitui em caso de conflito
       count++;
     }
@@ -635,7 +658,7 @@ function processPaste(text) {
   lastEdited = null;
   const n = parseText(text);
   save(); render();
-  toast(n > 0 ? "Tabela atualizada (" + n + " figurinhas)" : "Nenhuma figurinha encontrada no texto");
+  toast(n > 0 ? "Tabela atualizada (" + n + " figurinhas)" : "Nenhuma figurinha encontrada no texto", n > 0 ? "ok" : "info");
 }
 
 const pasteArea = document.getElementById("pasteArea");
@@ -654,7 +677,7 @@ document.getElementById("clearBtn").addEventListener("click", () => {
 /* ----- Reconstrução do texto + copiar ----- */
 function buildText() {
   const o = orderedSiglas();
-  const fmt = e => e.qty > 1 ? (e.num + " (" + e.qty + "x)") : ("" + e.num);
+  const fmt = e => { const n = numText(e.sigla, e.num); return e.qty > 1 ? (n + " (" + e.qty + "x)") : n; };
   let out = "⚽ FIGURINHAS REPETIDAS ⚽\n";
 
   // países: agrupados pela letra inicial da sigla (com cabeçalho de letra e espaço inicial)
@@ -678,30 +701,33 @@ function buildText() {
 }
 
 document.getElementById("copyBtn").addEventListener("click", async () => {
-  if (entries.length === 0) { toast("Tabela vazia"); return; }
+  if (entries.length === 0) { toast("Tabela vazia", "info"); return; }
   const text = buildText();
   try {
     await navigator.clipboard.writeText(text);
-    toast("Controle copiado!");
+    toast("Controle copiado!", "ok");
   } catch (e) {
     // fallback (contextos sem clipboard API)
     const ta = document.createElement("textarea");
     ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand("copy"); toast("Controle copiado!"); }
-    catch (_) { toast("Não foi possível copiar"); }
+    try { document.execCommand("copy"); toast("Controle copiado!", "ok"); }
+    catch (_) { toast("Não foi possível copiar", "erro"); }
     document.body.removeChild(ta);
   }
 });
 
-/* ----- Toast ----- */
+/* ----- Toast / aviso de operação -----
+   No desktop é um tip discreto (canto inferior); no celular vira um aviso grande
+   travado no centro da tela. O `type` (soma/substituicao/subtracao/remocao/ok/info/erro)
+   define a cor. */
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, type) {
   const el = document.getElementById("toast");
   el.textContent = msg;
-  el.classList.add("show");
+  el.className = "show" + (type ? " t-" + type : "");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2000);
 }
 
 /* ----- Init ----- */
