@@ -142,6 +142,37 @@
   .modal-close{ margin-top:14px; width:100%; background:transparent; border:none; color:var(--muted); font-weight:600; }
   .modal-close:hover{ background:#f3f5f7; }
 
+  /* ---------- TROCAS / VENDAS ---------- */
+  details.person{ background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:12px;
+    box-shadow:var(--shadow); overflow:hidden; }
+  details.person > summary{ list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center;
+    gap:10px; font-weight:700; }
+  details.person > summary::-webkit-details-marker{ display:none; }
+  summary .chev{ color:var(--muted); transition:transform .2s; font-size:.85rem; }
+  details.person[open] > summary .chev{ transform:rotate(90deg); }
+  summary .pname{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  summary .pcount{ font-size:.74rem; color:var(--primary-d); font-weight:700; background:#eaf7ef; padding:3px 9px; border-radius:999px; }
+  .revert-btn{ width:34px; height:34px; padding:0; font-size:1.05rem; border-radius:9px; border:1px solid #f3c9c9;
+    background:#fff5f5; color:var(--danger); line-height:1; flex:none; }
+  .revert-btn:hover{ background:#fde8e8; }
+  .person-body{ padding:0 14px 14px; }
+  .person-body .table-scroll{ max-height:42vh; }
+  .trade-inputs{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .trade-inputs .t-sigla{ flex:1 1 130px; min-width:110px; }
+  .trade-inputs .num-input{ width:74px; }
+  .empty-trades{ text-align:center; color:var(--muted); padding:26px 12px; }
+
+  /* switch (controle bonito de quantidade) */
+  .switch{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:.78rem; font-weight:600;
+    color:var(--muted); user-select:none; }
+  .switch input{ position:absolute; opacity:0; width:0; height:0; }
+  .switch .track{ width:42px; height:24px; border-radius:999px; background:#cbd5e1; position:relative;
+    transition:background .2s; flex:none; }
+  .switch .track::after{ content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:transform .2s; }
+  .switch input:checked + .track{ background:var(--primary); }
+  .switch input:checked + .track::after{ transform:translateX(18px); }
+
   /* ---------- TEXTAREA / COPY ---------- */
   textarea{ width:100%; min-height:130px; padding:12px; font-family:ui-monospace,Consolas,monospace; font-size:.85rem;
     border:1.5px solid var(--line); border-radius:10px; background:#fcfdfe; color:var(--ink); resize:vertical;
@@ -208,6 +239,7 @@
   <div id="stats" class="stats"></div>
   <nav id="menu" class="menu">
     <a data-view="tables" class="active">📊 Tabelas</a>
+    <a data-view="trades">🤝 Trocas / Vendas</a>
     <a data-view="load">📥 Carregar controle</a>
   </nav>
 </header>
@@ -316,6 +348,22 @@
     </div>
     <div class="hint">Ao colar (Ctrl+V) já processa. <strong>Substitui</strong> a tabela escolhida e o campo se limpa sozinho — esta tela não guarda estado.</div>
   </section>
+</div>
+
+<!-- ============ VIEW: TROCAS / VENDAS ============ -->
+<div class="wrap" id="viewTrades" hidden>
+  <section class="card">
+    <h2>🤝 Trocas / Vendas</h2>
+    <div class="inputs">
+      <div class="field" style="flex:1 1 200px;">
+        <label for="newPersonName">Nova pessoa</label>
+        <input id="newPersonName" type="text" autocomplete="off" placeholder="Nome da pessoa">
+      </div>
+      <button id="addPersonBtn" class="primary">Criar lista</button>
+    </div>
+    <div class="hint">Só é possível adicionar figurinhas que você tem em <strong>repetidas</strong> — ao inserir, elas <strong>saem das repetidas</strong>. O botão reverter (↺) devolve todas as figurinhas da pessoa para as repetidas. Digite a sigla (ou nome) do país, depois o número; ative <em>"inserir quantidade?"</em> para informar mais de uma.</div>
+  </section>
+  <div id="tradesList"></div>
 </div>
 
 <!-- Modal: escolher qual controle copiar -->
@@ -880,6 +928,7 @@ const tabsEls = document.querySelectorAll(".tab");
 function showView(name) {
   document.getElementById("viewTables").hidden = (name !== "tables");
   document.getElementById("viewLoad").hidden = (name !== "load");
+  document.getElementById("viewTrades").hidden = (name !== "trades");
   menu.querySelectorAll("a").forEach(a => a.classList.toggle("active", a.dataset.view === name));
 }
 function showTab(name) {
@@ -982,6 +1031,225 @@ document.getElementById("copyFaltBtn").addEventListener("click", () => { closeCo
 document.getElementById("copyCancelBtn").addEventListener("click", closeCopyModal);
 copyModal.addEventListener("click", e => { if (e.target === copyModal) closeCopyModal(); });
 
+/* ===== TROCAS / VENDAS =====
+   trades: [{ name, items:[{sigla,num,qty,flag}] }]. Inserir deduz das repetidas;
+   reverter soma tudo de volta para as repetidas e remove a pessoa. */
+const TRADES_KEY = "panini_trades_v1";
+let trades = [];
+function loadTrades() { try { const r = localStorage.getItem(TRADES_KEY); if (r) trades = JSON.parse(r) || []; } catch (e) { trades = []; } }
+function saveTrades() { try { localStorage.setItem(TRADES_KEY, JSON.stringify(trades)); } catch (e) {} }
+
+/* helpers de repetidas usados pelas trocas */
+function repQty(sigla, num) { const e = entries.find(x => x.sigla === sigla && x.num === num); return e ? e.qty : 0; }
+function repSubtract(sigla, num, q) {
+  const e = entries.find(x => x.sigla === sigla && x.num === num);
+  if (!e) return;
+  e.qty -= q;
+  if (e.qty <= 0) {
+    entries = entries.filter(x => !(x.sigla === sigla && x.num === num));
+    if (lastEdited && lastEdited.sigla === sigla && lastEdited.num === num) lastEdited = null;
+  }
+}
+function repAdd(sigla, num, q, flag) {
+  const e = entries.find(x => x.sigla === sigla && x.num === num);
+  if (e) e.qty += q; else entries.push({ sigla, num, qty: q, flag: flag || flagOf(sigla) });
+}
+
+/* resolve a sigla a partir de sigla exata (3/4) ou nome exato do país */
+function resolveSiglaFrom(text) {
+  const t = (text || "").trim();
+  if (!t) return null;
+  const up = t.toUpperCase();
+  if ((up.length === 3 || up.length === 4) && ITEM_MAP[up]) return up;
+  const found = ALL_ITEMS.find(i => norm(i.name) === norm(t));
+  return found ? found.sigla : null;
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* Insere `q` cópias de (sigla,num) na lista da pessoa, deduzindo das repetidas.
+   Alerta (warning) se não houver a figurinha / quantidade suficiente. Retorna true se inseriu. */
+function tradeInsert(person, sigla, num, q) {
+  const nLabel = numText(sigla, num);
+  const avail = repQty(sigla, num);
+  if (avail <= 0) { toast("⚠️ Não temos " + sigla + " nº " + nLabel + " para trocar/vender", "warning"); return false; }
+  if (avail < q) { toast("⚠️ Só temos " + avail + " de " + sigla + " nº " + nLabel + " em repetidas", "warning"); return false; }
+  repSubtract(sigla, num, q);
+  const it = person.items.find(i => i.sigla === sigla && i.num === num);
+  if (it) it.qty += q; else person.items.push({ sigla, num, qty: q, flag: flagOf(sigla) });
+  save(); render();        // repetidas mudou
+  saveTrades();
+  toast("Troca · " + person.name + ": +" + q + " " + sigla + " nº " + nLabel, "ok");
+  return true;
+}
+
+function revertPerson(person) {
+  const total = person.items.reduce((s, i) => s + i.qty, 0);
+  const msg = total > 0
+    ? "Reverter a lista de " + person.name + "? As " + total + " figurinha(s) voltam para repetidas."
+    : "Remover a lista de " + person.name + "?";
+  if (!confirm(msg)) return;
+  for (const it of person.items) repAdd(it.sigla, it.num, it.qty, it.flag);
+  trades = trades.filter(p => p !== person);
+  save(); saveTrades(); render(); renderTrades();
+  toast(total > 0 ? ("Revertido: " + total + " fig. de " + person.name + " voltaram para repetidas") : ("Lista de " + person.name + " removida"), "ok");
+}
+
+/* ----- Render das listas (expanders) ----- */
+const tradesList = document.getElementById("tradesList");
+
+function fillPersonTable(tb, person) {
+  tb.innerHTML = "";
+  if (person.items.length === 0) {
+    tb.innerHTML = '<tr><td class="empty" colspan="3">Nenhuma figurinha nesta lista ainda.</td></tr>';
+    return;
+  }
+  const order = [], map = {};
+  for (const it of person.items) { if (!map[it.sigla]) { map[it.sigla] = []; order.push(it.sigla); } map[it.sigla].push(it); }
+  for (const s of order) {
+    const items = map[s].slice().sort((a, b) => a.num - b.num);
+    const cell = items.map(i => i.qty > 1 ? (numText(s, i.num) + " (" + i.qty + "x)") : numText(s, i.num)).join(", ");
+    const tr = document.createElement("tr");
+    tr.className = "no-click";
+    tr.innerHTML = '<td class="flag">' + flagIcon(s, items[0].flag) + '</td><td>' + s + '</td><td class="falt">' + cell + '</td>';
+    tb.appendChild(tr);
+  }
+}
+
+function buildTradeControls(person, afterInsert) {
+  const wrap = document.createElement("div");
+  wrap.className = "trade-inputs";
+  wrap.innerHTML =
+    '<input class="t-sigla" type="text" autocomplete="off" placeholder="Sigla / país">' +
+    '<input class="t-num num-input" type="text" inputmode="numeric" autocomplete="off" placeholder="nº">' +
+    '<label class="switch"><input type="checkbox" class="t-toggle"><span class="track"></span><span>inserir quantidade?</span></label>' +
+    '<input class="t-qty num-input" type="text" inputmode="numeric" autocomplete="off" placeholder="qtd" hidden>' +
+    '<button class="t-add primary">Inserir</button>';
+  const siglaEl = wrap.querySelector(".t-sigla");
+  const numEl = wrap.querySelector(".t-num");
+  const toggleEl = wrap.querySelector(".t-toggle");
+  const qtyEl = wrap.querySelector(".t-qty");
+  const addBtn = wrap.querySelector(".t-add");
+  const st = { sigla: null };
+  let numTmr = null, qtyTmr = null;
+  const clearTmrs = () => { if (numTmr) { clearTimeout(numTmr); numTmr = null; } if (qtyTmr) { clearTimeout(qtyTmr); qtyTmr = null; } };
+
+  toggleEl.addEventListener("change", () => {
+    qtyEl.hidden = !toggleEl.checked;
+    if (!toggleEl.checked) qtyEl.value = "";
+  });
+
+  siglaEl.addEventListener("input", () => {
+    const sg = resolveSiglaFrom(siglaEl.value);
+    st.sigla = sg;
+    if (sg) numEl.focus();
+  });
+
+  numEl.addEventListener("input", () => {
+    if (numTmr) { clearTimeout(numTmr); numTmr = null; }
+    const max = maxNumOf(st.sigla);
+    let v = numEl.value.replace(/\D/g, "");
+    if (v.length > 2) v = v.slice(0, 2);
+    if (v.length === 2 && parseInt(v, 10) > max) v = v.slice(0, 1);
+    numEl.value = v;
+    if (!v) return;
+    const finish = () => { if (toggleEl.checked) qtyEl.focus(); else doInsert(); };
+    if (v.length === 2) { finish(); return; }
+    if (parseInt(v + "0", 10) > max) finish();                          // não dá pra estender -> completa
+    else numTmr = setTimeout(() => { numTmr = null; finish(); }, NUM_ADVANCE_DELAY);
+  });
+  numEl.addEventListener("keydown", e => {
+    if (e.key === "Enter") { if (numTmr) { clearTimeout(numTmr); numTmr = null; } if (toggleEl.checked) qtyEl.focus(); else doInsert(); e.preventDefault(); }
+  });
+
+  qtyEl.addEventListener("input", () => {
+    if (qtyTmr) { clearTimeout(qtyTmr); qtyTmr = null; }
+    qtyEl.value = qtyEl.value.replace(/\D/g, "").slice(0, 2);
+    if (!qtyEl.value) return;
+    if (qtyEl.value.length === 2) doInsert();
+    else qtyTmr = setTimeout(() => { qtyTmr = null; doInsert(); }, NUM_ADVANCE_DELAY);
+  });
+  qtyEl.addEventListener("keydown", e => { if (e.key === "Enter") { doInsert(); e.preventDefault(); } });
+  addBtn.addEventListener("click", doInsert);
+
+  function doInsert() {
+    clearTmrs();
+    const sg = st.sigla || resolveSiglaFrom(siglaEl.value);
+    if (!sg) { toast("Digite uma sigla/país válido", "erro"); siglaEl.focus(); return; }
+    const num = parseInt(numEl.value, 10);
+    const min = minNumOf(sg), max = maxNumOf(sg);
+    if (Number.isNaN(num) || num < min || num > max) { toast("Número deve ser de " + numText(sg, min) + " a " + max, "erro"); numEl.focus(); return; }
+    let q = 1;
+    if (toggleEl.checked) { q = parseInt(qtyEl.value, 10); if (!q || q < 1) q = 1; }
+    if (tradeInsert(person, sg, num, q)) {
+      afterInsert();
+      siglaEl.value = ""; numEl.value = ""; qtyEl.value = ""; st.sigla = null;   // limpa e volta ao 1º
+      siglaEl.focus();
+    }
+  }
+
+  return wrap;
+}
+
+function buildPersonNode(person) {
+  const det = document.createElement("details");
+  det.className = "person";
+  const total = person.items.reduce((s, i) => s + i.qty, 0);
+
+  const sum = document.createElement("summary");
+  sum.innerHTML =
+    '<span class="chev">▸</span>' +
+    '<span class="pname">' + escapeHtml(person.name) + '</span>' +
+    '<span class="pcount">' + total + ' fig.</span>' +
+    '<button class="revert-btn" title="Reverter (devolver para repetidas)">↺</button>';
+  sum.querySelector(".revert-btn").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); revertPerson(person); });
+  det.appendChild(sum);
+
+  const body = document.createElement("div");
+  body.className = "person-body";
+  const scroll = document.createElement("div");
+  scroll.className = "table-scroll";
+  scroll.innerHTML = '<table><thead><tr><th>Bandeira</th><th>Sigla</th><th>Figurinhas</th></tr></thead><tbody></tbody></table>';
+  const tb = scroll.querySelector("tbody");
+  body.appendChild(scroll);
+
+  const refreshLocal = () => {
+    fillPersonTable(tb, person);
+    sum.querySelector(".pcount").textContent = person.items.reduce((s, i) => s + i.qty, 0) + " fig.";
+  };
+  body.appendChild(buildTradeControls(person, refreshLocal));
+  det.appendChild(body);
+
+  fillPersonTable(tb, person);
+  return det;
+}
+
+function renderTrades() {
+  tradesList.innerHTML = "";
+  if (trades.length === 0) {
+    tradesList.innerHTML = '<div class="card"><div class="empty-trades">Nenhuma lista ainda. Crie uma pelo campo acima.</div></div>';
+    return;
+  }
+  trades.forEach(person => tradesList.appendChild(buildPersonNode(person)));
+}
+
+const newPersonName = document.getElementById("newPersonName");
+function addPerson() {
+  const name = newPersonName.value.trim();
+  if (!name) { toast("Digite o nome da pessoa", "erro"); newPersonName.focus(); return; }
+  if (trades.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast("Já existe uma lista para " + name, "info"); return; }
+  trades.push({ name, items: [] });
+  saveTrades(); renderTrades();
+  newPersonName.value = "";
+  const last = tradesList.lastElementChild;
+  if (last && last.tagName === "DETAILS") last.open = true;
+  toast("Lista criada: " + name, "ok");
+}
+document.getElementById("addPersonBtn").addEventListener("click", addPerson);
+newPersonName.addEventListener("keydown", e => { if (e.key === "Enter") { addPerson(); e.preventDefault(); } });
+
 /* ----- Toast / aviso de operação -----
    No desktop é um tip discreto (canto inferior); no celular vira um aviso grande
    travado no centro da tela. O `type` (soma/substituicao/subtracao/remocao/ok/info/erro)
@@ -998,8 +1266,10 @@ function toast(msg, type) {
 /* ----- Init ----- */
 load();
 loadFalt();
+loadTrades();
 render();
 renderFaltantes();
+renderTrades();
 showTab("repetidas");
 showView("tables");
 </script>
