@@ -152,13 +152,19 @@
   details.person[open] > summary .chev{ transform:rotate(90deg); }
   summary .pname{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   summary .pcount{ font-size:.74rem; color:var(--primary-d); font-weight:700; background:#eaf7ef; padding:3px 9px; border-radius:999px; }
-  .revert-btn{ width:34px; height:34px; padding:0; font-size:1.05rem; border-radius:9px; border:1px solid #f3c9c9;
-    background:#fff5f5; color:var(--danger); line-height:1; flex:none; }
+  .sum-btn{ width:34px; height:34px; padding:0; font-size:1.05rem; border-radius:9px; line-height:1; flex:none; }
+  .revert-btn{ border:1px solid #f3c9c9; background:#fff5f5; color:var(--danger); }
   .revert-btn:hover{ background:#fde8e8; }
+  .done-btn{ border:1px solid #bfe6cd; background:#eaf7ef; color:var(--primary-d); }
+  .done-btn:hover{ background:#d7f0e1; }
   .person-body{ padding:0 14px 14px; }
   .person-body .table-scroll{ max-height:42vh; }
   .trade-inputs{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
-  .trade-inputs .t-sigla{ flex:1 1 130px; min-width:110px; }
+  .trade-inputs .sigla-wrap{ position:relative; flex:1 1 140px; min-width:120px; display:flex; }
+  .trade-inputs .sigla-wrap .t-sigla{ flex:1; padding-right:40px; }
+  .sigla-flag{ position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;
+    display:inline-flex; align-items:center; font-size:1.25rem; }
+  .sigla-flag .fi{ border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,.25); }
   .trade-inputs .num-input{ width:74px; }
   .empty-trades{ text-align:center; color:var(--muted); padding:26px 12px; }
 
@@ -1097,10 +1103,34 @@ function revertPerson(person) {
   toast(total > 0 ? ("Revertido: " + total + " fig. de " + person.name + " voltaram para repetidas") : ("Lista de " + person.name + " removida"), "ok");
 }
 
+/* Concluir troca/venda: remove a pessoa SEM devolver nada às repetidas (a troca aconteceu). */
+function completePerson(person) {
+  const total = person.items.reduce((s, i) => s + i.qty, 0);
+  if (!confirm("Concluir a troca/venda de " + person.name + "?\nAs " + total + " figurinha(s) saem de vez (NÃO voltam para repetidas).")) return;
+  trades = trades.filter(p => p !== person);
+  saveTrades(); renderTrades();
+  toast("Troca concluída: " + person.name + " (" + total + " fig.)", "ok");
+}
+
 /* ----- Render das listas (expanders) ----- */
 const tradesList = document.getElementById("tradesList");
 
-function fillPersonTable(tb, person) {
+/* Remove um time inteiro da lista da pessoa, devolvendo as figurinhas para repetidas. */
+function removeTeamFromPerson(person, sigla, refresh) {
+  const teamItems = person.items.filter(i => i.sigla === sigla);
+  if (teamItems.length === 0) return;
+  const total = teamItems.reduce((s, i) => s + i.qty, 0);
+  const nums = teamItems.slice().sort((a, b) => a.num - b.num)
+    .map(i => i.qty > 1 ? (numText(sigla, i.num) + " (" + i.qty + "x)") : numText(sigla, i.num)).join(", ");
+  if (!confirm("Remover " + flagOf(sigla) + " " + sigla + " (" + nums + ") da lista de " + person.name +
+               "?\nAs figurinhas voltam para repetidas.")) return;
+  for (const it of teamItems) repAdd(it.sigla, it.num, it.qty, it.flag);
+  person.items = person.items.filter(i => i.sigla !== sigla);
+  save(); saveTrades(); render(); refresh();
+  toast("Removido · " + total + " fig. de " + sigla + " voltaram para repetidas", "ok");
+}
+
+function fillPersonTable(tb, person, refresh) {
   tb.innerHTML = "";
   if (person.items.length === 0) {
     tb.innerHTML = '<tr><td class="empty" colspan="3">Nenhuma figurinha nesta lista ainda.</td></tr>';
@@ -1112,8 +1142,9 @@ function fillPersonTable(tb, person) {
     const items = map[s].slice().sort((a, b) => a.num - b.num);
     const cell = items.map(i => i.qty > 1 ? (numText(s, i.num) + " (" + i.qty + "x)") : numText(s, i.num)).join(", ");
     const tr = document.createElement("tr");
-    tr.className = "no-click";
+    tr.title = "Clique para remover e devolver às repetidas";
     tr.innerHTML = '<td class="flag">' + flagIcon(s, items[0].flag) + '</td><td>' + s + '</td><td class="falt">' + cell + '</td>';
+    tr.addEventListener("click", () => removeTeamFromPerson(person, s, refresh));
     tb.appendChild(tr);
   }
 }
@@ -1122,12 +1153,13 @@ function buildTradeControls(person, afterInsert) {
   const wrap = document.createElement("div");
   wrap.className = "trade-inputs";
   wrap.innerHTML =
-    '<input class="t-sigla" type="text" autocomplete="off" placeholder="Sigla / país">' +
+    '<div class="sigla-wrap"><input class="t-sigla" type="text" autocomplete="off" placeholder="Sigla / país"><span class="sigla-flag"></span></div>' +
     '<input class="t-num num-input" type="text" inputmode="numeric" autocomplete="off" placeholder="nº">' +
     '<label class="switch"><input type="checkbox" class="t-toggle"><span class="track"></span><span>inserir quantidade?</span></label>' +
     '<input class="t-qty num-input" type="text" inputmode="numeric" autocomplete="off" placeholder="qtd" hidden>' +
     '<button class="t-add primary">Inserir</button>';
   const siglaEl = wrap.querySelector(".t-sigla");
+  const flagEl = wrap.querySelector(".sigla-flag");
   const numEl = wrap.querySelector(".t-num");
   const toggleEl = wrap.querySelector(".t-toggle");
   const qtyEl = wrap.querySelector(".t-qty");
@@ -1144,6 +1176,7 @@ function buildTradeControls(person, afterInsert) {
   siglaEl.addEventListener("input", () => {
     const sg = resolveSiglaFrom(siglaEl.value);
     st.sigla = sg;
+    flagEl.innerHTML = sg ? flagIcon(sg) : "";   // localiza o país com a bandeira no input
     if (sg) numEl.focus();
   });
 
@@ -1185,7 +1218,7 @@ function buildTradeControls(person, afterInsert) {
     if (toggleEl.checked) { q = parseInt(qtyEl.value, 10); if (!q || q < 1) q = 1; }
     if (tradeInsert(person, sg, num, q)) {
       afterInsert();
-      siglaEl.value = ""; numEl.value = ""; qtyEl.value = ""; st.sigla = null;   // limpa e volta ao 1º
+      siglaEl.value = ""; numEl.value = ""; qtyEl.value = ""; st.sigla = null; flagEl.innerHTML = "";   // limpa e volta ao 1º
       siglaEl.focus();
     }
   }
@@ -1203,7 +1236,9 @@ function buildPersonNode(person) {
     '<span class="chev">▸</span>' +
     '<span class="pname">' + escapeHtml(person.name) + '</span>' +
     '<span class="pcount">' + total + ' fig.</span>' +
-    '<button class="revert-btn" title="Reverter (devolver para repetidas)">↺</button>';
+    '<button class="sum-btn done-btn" title="Concluir troca/venda (não devolve às repetidas)">✓</button>' +
+    '<button class="sum-btn revert-btn" title="Reverter (devolver para repetidas)">↺</button>';
+  sum.querySelector(".done-btn").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); completePerson(person); });
   sum.querySelector(".revert-btn").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); revertPerson(person); });
   det.appendChild(sum);
 
@@ -1216,13 +1251,13 @@ function buildPersonNode(person) {
   body.appendChild(scroll);
 
   const refreshLocal = () => {
-    fillPersonTable(tb, person);
+    fillPersonTable(tb, person, refreshLocal);
     sum.querySelector(".pcount").textContent = person.items.reduce((s, i) => s + i.qty, 0) + " fig.";
   };
   body.appendChild(buildTradeControls(person, refreshLocal));
   det.appendChild(body);
 
-  fillPersonTable(tb, person);
+  fillPersonTable(tb, person, refreshLocal);
   return det;
 }
 
