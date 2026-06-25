@@ -24,12 +24,12 @@
   /* ---------- HERO ---------- */
   .hero{
     max-width:780px; margin:0 auto 18px; color:#fff; padding:24px 22px 20px;
-    background:linear-gradient(135deg,var(--primary-dd),var(--primary) 55%,#2bbf6c);
+    background:
+      radial-gradient(circle at 90% -20%, rgba(255,255,255,.26), transparent 42%),
+      linear-gradient(135deg,var(--primary-dd),var(--primary) 55%,#2bbf6c);
     border-radius:0 0 var(--radius) var(--radius); box-shadow:var(--shadow);
-    position:relative; overflow:hidden; animation:slideDown .5s ease both;
+    position:relative; animation:slideDown .5s ease both;
   }
-  .hero::after{ content:""; position:absolute; right:-40px; top:-50px; width:190px; height:190px;
-    background:radial-gradient(circle at 35% 35%,rgba(255,255,255,.28),transparent 62%); pointer-events:none; }
   .hero h1{ margin:0; font-size:1.55rem; font-weight:800; letter-spacing:.3px; display:flex; align-items:center; gap:10px; }
   .hero .ball{ display:inline-block; font-size:1.7rem; animation:spin 9s linear infinite; }
   .hero .sub{ margin-top:5px; font-size:.85rem; opacity:.92; }
