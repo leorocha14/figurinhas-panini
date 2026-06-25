@@ -718,19 +718,21 @@ const clearNumTimer = () => { if (numTimer) { clearTimeout(numTimer); numTimer =
 
 numInput.addEventListener("input", () => {
   clearNumTimer();
+  const max = maxNumOf(selectedSigla);                 // país: 20 · FWC/COCA: 99
   let v = numInput.value.replace(/\D/g, "");
   if (v.length > 2) v = v.slice(0, 2);
+  if (v.length === 2 && parseInt(v, 10) > max) v = v.slice(0, 1);   // não deixa passar do máximo
   numInput.value = v;
   if (!v) return;
 
-  if (v.length === 2) { qtyInput.focus(); return; }   // já tem 2 dígitos -> avança na hora
+  if (v.length === 2) { qtyInput.focus(); return; }   // 2 dígitos válidos -> avança na hora
 
-  // 1 dígito: ainda pode virar nº de 2 dígitos? (país: só 1 ou 2 viram 10–20; especial: qualquer)
-  const podeEstender = isSpecial(selectedSigla) ? true : (v === "1" || v === "2");
+  // 1 dígito: ainda pode virar um nº de 2 dígitos válido (<= max)?
+  const podeEstender = parseInt(v + "0", 10) <= max;   // país "1"/"2" -> 10/20<=20; "3" -> 30>20 não
   if (podeEstender) {
     numTimer = setTimeout(() => { numTimer = null; qtyInput.focus(); }, NUM_ADVANCE_DELAY);
   } else {
-    qtyInput.focus();   // 3–9 num país: não há nº válido <=20 com 2 dígitos -> avança já
+    qtyInput.focus();   // não há 2º dígito que mantenha <= max -> avança já
   }
 });
 numInput.addEventListener("keydown", e => {
@@ -761,6 +763,7 @@ function submitEntry() {
 
   let qty = parseInt(qtyInput.value, 10);
   if (!qty || qty < 1) qty = 1;
+  const inputQty = qty;                      // o que o usuário digitou (para o aviso)
 
   if (mode === "subtrair") {                 // INALTERADO: opera só nas repetidas, cor verde
     const ex = entries.find(e => e.sigla === sigla && e.num === num);
@@ -778,7 +781,7 @@ function submitEntry() {
     lastEdited = { sigla, num };
     save(); render();
     highlightRow(sigla, num);
-    toast("Subtração · " + sigla + " nº " + nLabel + " (" + newQty + "x)", "ok");
+    toast("Subtração · " + sigla + " nº " + nLabel + " (-" + inputQty + ")", "ok");
     resetInputs(sigla);
     return;
   }
@@ -811,7 +814,9 @@ function submitEntry() {
   lastEdited = { sigla, num };
   save(); render();
   highlightRow(sigla, num);
-  toast((mode === "somar" ? "Soma · " : "Substituição · ") + sigla + " nº " + nLabel + " (" + qty + "x)", "ok");
+  toast(mode === "somar"
+    ? ("Soma · " + sigla + " nº " + nLabel + " (+" + inputQty + ")")          // mostra o que foi somado
+    : ("Substituição · " + sigla + " nº " + nLabel + " (" + inputQty + "x)"), "ok");
   resetInputs(sigla);
 }
 
