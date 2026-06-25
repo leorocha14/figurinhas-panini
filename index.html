@@ -1218,8 +1218,9 @@ function buildTradeControls(person, afterInsert) {
     if (toggleEl.checked) { q = parseInt(qtyEl.value, 10); if (!q || q < 1) q = 1; }
     if (tradeInsert(person, sg, num, q)) {
       afterInsert();
-      siglaEl.value = ""; numEl.value = ""; qtyEl.value = ""; st.sigla = null; flagEl.innerHTML = "";   // limpa e volta ao 1º
-      siglaEl.focus();
+      st.sigla = sg;                          // mantém o país (e a bandeira no input)
+      numEl.value = ""; qtyEl.value = "";     // zera só número e quantidade
+      numEl.focus();                          // pronto para a próxima figurinha do mesmo país
     }
   }
 
